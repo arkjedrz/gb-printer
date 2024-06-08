@@ -1,0 +1,9 @@
+---
+Language: Cpp
+BasedOnStyle: Google
+IndentWidth: 4
+IncludeBlocks: Preserve
+ColumnLimit: 100
+AlignConsecutiveMacros: true
+...
+
