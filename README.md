@@ -35,10 +35,3 @@ To run client use:
 ```bash
 ./client/gb_printer_client.py
 ```
-
-## TODO list
-
-- enable SmartConfig on button press
-- handle image parameters (number of sheets, margins, palette, exposure)
-- improve printer error handling (error persistence)
-- allow image overwrite
