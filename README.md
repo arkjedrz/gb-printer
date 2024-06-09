@@ -22,6 +22,20 @@ Wire color may vary.
 - pin 12 - Rx - green
 - pin 17 - clock - orange
 
+## Simple client
+
+To run simple client install requirements:
+
+```bash
+pip install -r client/requirements.txt
+```
+
+To run client use:
+
+```bash
+./client/gb_printer_client.py
+```
+
 ## TODO list
 
 - enable SmartConfig on button press
