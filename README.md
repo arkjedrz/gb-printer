@@ -22,16 +22,7 @@ Wire color may vary.
 - pin 12 - Rx - green
 - pin 17 - clock - orange
 
-## Simple client
+## Usage
 
-To run simple client install requirements:
-
-```bash
-pip install -r client/requirements.txt
-```
-
-To run client use:
-
-```bash
-./client/gb_printer_client.py
-```
+Use EspTouch to configure Wi-Fi.
+After it is configured - access device using `http://gb-printer/`.

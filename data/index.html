@@ -1,0 +1,183 @@
+<!DOCTYPE HTML>
+<html>
+
+<head>
+    <meta charset="ISO-8859-1">
+    <title>GB Printer emulator</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="icon" href="data:,">
+    <style>
+        html {
+            font-family: "Arial";
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 1.8rem;
+            color: white;
+        }
+
+        .topnav {
+            overflow: hidden;
+            background-color: darkslategray;
+        }
+
+        body {
+            margin: 0;
+        }
+
+        .content {
+            padding: 30px;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .button {
+            padding: 15px 50px;
+            font-size: 24px;
+            text-align: center;
+            outline: none;
+            color: white;
+            background-color: darkslategray;
+            border: darkslategray;
+            border-radius: 5px;
+            user-select: none;
+        }
+
+        .button:active {
+            background-color: black;
+            transform: translateY(2px);
+        }
+
+        .state {
+            font-size: 1.5rem;
+            color: black;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="topnav">
+        <h1>GB Printer emulator</h1>
+    </div>
+    <div class="content">
+        <p class="state">Link active: <span id="linkActiveState">false</span></p>
+        <p><img id="image"></p>
+        <p><button id="saveButton" class="button" title="Save image locally and remove on the device">Save</button></p>
+        <p><button id="removeButton" class="button" title="Remove image on the device">Remove</button></p>
+    </div>
+    <script>
+        const address = window.location.hostname;
+        const refreshIntervalMs = 1000;
+
+        function download(url, filename) {
+            fetch(url)
+                .then(response => response.blob())
+                .then(blob => {
+                    const link = document.createElement("a");
+                    link.href = URL.createObjectURL(blob);
+                    link.download = filename;
+                    link.click();
+                })
+                .catch(console.error);
+        }
+
+        // Link active indicator and image display implementation.
+        // Both share same 'setInterval' loop.
+        let linkActiveState = document.getElementById("linkActiveState");
+        let image = document.getElementById("image");
+        setInterval(() => {
+            // Get link active.
+            const linkActiveReq = new XMLHttpRequest();
+            linkActiveReq.open("GET", `http://${address}/link-active`);
+            linkActiveReq.send();
+            linkActiveReq.responseType = "text";
+            linkActiveReq.onload = () => {
+                if (linkActiveReq.readyState != 4 || linkActiveReq.status != 200) {
+                    return;
+                }
+
+                const linkActive = linkActiveReq.responseText == "1";
+                linkActiveState.textContent = linkActive;
+            };
+
+            // Get image ready and image.
+            const imageReadyReq = new XMLHttpRequest();
+            imageReadyReq.open("GET", `http://${address}/image-ready`);
+            imageReadyReq.send();
+            imageReadyReq.responseType = "text";
+            imageReadyReq.onload = () => {
+                if (imageReadyReq.readyState != 4 || imageReadyReq.status != 200) {
+                    return;
+                }
+
+                const imageReady = imageReadyReq.responseText == "1";
+                if (imageReady) {
+                    image.src = `http://${address}/image`;
+                    image.style.display = "";
+                }
+                else {
+                    image.style.display = "none";
+                }
+            };
+        }, refreshIntervalMs);
+
+        // Save button implementation.
+        let saveButton = document.getElementById("saveButton");
+        saveButton.onclick = () => {
+            // Check image is available.
+            const imageReadyReq = new XMLHttpRequest();
+            imageReadyReq.open("GET", `http://${address}/image-ready`);
+            imageReadyReq.send();
+            imageReadyReq.responseType = "text";
+            imageReadyReq.onload = () => {
+                if (imageReadyReq.readyState != 4 || imageReadyReq.status != 200) {
+                    return;
+                }
+
+                const imageReady = imageReadyReq.responseText == "1";
+                if (imageReady) {
+                    fetch(`http://${address}/image`)
+                        .then(response => response.blob())
+                        .then(blob => {
+                            // Download image.
+                            const link = document.createElement("a");
+                            link.href = URL.createObjectURL(blob);
+                            link.download = "gb-image.png";
+                            link.click();
+                        })
+                        .then(() => {
+                            // Remove after download.
+                            const imageDeleteReq = new XMLHttpRequest();
+                            imageDeleteReq.open("DELETE", `http://${address}/delete-image`);
+                            imageDeleteReq.send();
+                            imageDeleteReq.onload = () => {
+                                if (imageDeleteReq.readyState != 4 || imageDeleteReq.status != 200) {
+                                    console.error("Failed to remove the image");
+                                }
+                            };
+                        })
+                        .catch(console.error);
+                }
+                else {
+                    console.error("Image is not ready");
+                }
+            };
+        };
+
+        // Remove button implementation.
+        let removeButton = document.getElementById("removeButton");
+        removeButton.onclick = () => {
+            const imageDeleteReq = new XMLHttpRequest();
+            imageDeleteReq.open("DELETE", `http://${address}/delete-image`);
+            imageDeleteReq.send();
+            imageDeleteReq.onload = () => {
+                if (imageDeleteReq.readyState != 4 || imageDeleteReq.status != 200) {
+                    console.error("Failed to remove the image");
+                }
+            };
+        };
+    </script>
+</body>
+
+</html>

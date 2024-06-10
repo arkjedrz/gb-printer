@@ -1,14 +1,43 @@
 #include "webserver.h"
+#include <sys/stat.h>
 #include "common.h"
 #include "esp_http_server.h"
 #include "esp_log.h"
+#include "esp_spiffs.h"
 #include "image_builder.h"
 #include "mdns.h"
 #include "printer.h"
 
-UNUSED static const char* TAG = "WEBSERVER";
+static const char* TAG = "WEBSERVER";
 
 static httpd_handle_t handle = NULL;
+static const char* index_html_path = "/spiffs/index.html";
+static char index_html_data[8 * 1024];
+
+static esp_err_t start_spiffs(void) {
+    // Initialize SPIFFS.
+    esp_vfs_spiffs_conf_t conf = {.base_path = "/spiffs",
+                                  .partition_label = NULL,
+                                  .max_files = 5,
+                                  .format_if_mount_failed = true};
+    ESP_ERROR_RETURN(esp_vfs_spiffs_register(&conf));
+
+    // Check if 'index.html' is available.
+    struct stat st;
+    if (stat(index_html_path, &st)) {
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    // Load page to memory.
+    memset(index_html_data, 0, sizeof(index_html_data));
+    FILE* index_file = fopen(index_html_path, "r");
+    if (fread(index_html_data, st.st_size, 1, index_file) == 0) {
+        return ESP_ERR_NOT_FOUND;
+    }
+    fclose(index_file);
+
+    return ESP_OK;
+}
 
 static esp_err_t start_mdns(void) {
     // Initialize and set names.
@@ -24,24 +53,27 @@ static esp_err_t start_mdns(void) {
     return ESP_OK;
 }
 
-static esp_err_t get_status_handler(httpd_req_t* req) {
-    char resp[512];
-    sprintf(resp,
-            "link_active = %d\n"
-            "num_image_parts = %d\n"
-            "image_ready = %d\n",
-            printer_is_link_active(), image_num_parts(), image_png_ready());
+static esp_err_t main_page_get_handler(httpd_req_t* req) {
+    ESP_LOGV(TAG, "main_page_get_handler");
+    return httpd_resp_send(req, index_html_data, HTTPD_RESP_USE_STRLEN);
+}
 
-    // Set content type.
-    ESP_ERROR_RETURN(httpd_resp_set_type(req, "text/plain"));
-    // Send data.
+static esp_err_t link_active_get_handler(httpd_req_t* req) {
+    ESP_LOGV(TAG, "link_active_get_handler");
+    char resp[16];
+    sprintf(resp, "%d", printer_is_link_active());
     return httpd_resp_send(req, resp, HTTPD_RESP_USE_STRLEN);
 }
 
-static httpd_uri_t get_status_def = {
-    .uri = "/status", .method = HTTP_GET, .handler = get_status_handler, .user_ctx = NULL};
+static esp_err_t image_ready_get_handler(httpd_req_t* req) {
+    ESP_LOGV(TAG, "image_ready_get_handler");
+    char resp[16];
+    sprintf(resp, "%d", image_png_ready());
+    return httpd_resp_send(req, resp, HTTPD_RESP_USE_STRLEN);
+}
 
-static esp_err_t get_image_handler(httpd_req_t* req) {
+static esp_err_t image_get_handler(httpd_req_t* req) {
+    ESP_LOGV(TAG, "image_get_handler");
     const size_t png_length = image_png_length();
     const uint8_t* png_buffer = image_png_buffer();
 
@@ -56,18 +88,11 @@ static esp_err_t get_image_handler(httpd_req_t* req) {
     return httpd_resp_send(req, (const char*)png_buffer, png_length);
 }
 
-static httpd_uri_t get_image_def = {
-    .uri = "/image", .method = HTTP_GET, .handler = get_image_handler, .user_ctx = NULL};
-
-static esp_err_t delete_image_handler(httpd_req_t* req) {
+static esp_err_t image_delete_handler(httpd_req_t* req) {
+    ESP_LOGV(TAG, "image_delete_handler");
     image_png_clear();
-    return httpd_resp_send(req, "", 0);
+    return httpd_resp_send(req, "1", HTTPD_RESP_USE_STRLEN);
 }
-
-static httpd_uri_t delete_image_def = {.uri = "/delete-image",
-                                       .method = HTTP_DELETE,
-                                       .handler = delete_image_handler,
-                                       .user_ctx = NULL};
 
 static esp_err_t start_webserver(void) {
     // Start server.
@@ -75,14 +100,40 @@ static esp_err_t start_webserver(void) {
     ESP_ERROR_RETURN(httpd_start(&handle, &config));
 
     // Register handlers.
-    ESP_ERROR_RETURN(httpd_register_uri_handler(handle, &get_status_def));
-    ESP_ERROR_RETURN(httpd_register_uri_handler(handle, &get_image_def));
-    ESP_ERROR_RETURN(httpd_register_uri_handler(handle, &delete_image_def));
+
+    const httpd_uri_t main_page_get = {
+        .uri = "/", .method = HTTP_GET, .handler = main_page_get_handler, .user_ctx = NULL};
+    ESP_ERROR_RETURN(httpd_register_uri_handler(handle, &main_page_get));
+
+    const httpd_uri_t link_active_get = {.uri = "/link-active",
+                                         .method = HTTP_GET,
+                                         .handler = link_active_get_handler,
+                                         .user_ctx = NULL};
+    ESP_ERROR_RETURN(httpd_register_uri_handler(handle, &link_active_get));
+
+    const httpd_uri_t image_ready_get = {.uri = "/image-ready",
+                                         .method = HTTP_GET,
+                                         .handler = image_ready_get_handler,
+                                         .user_ctx = NULL};
+    ESP_ERROR_RETURN(httpd_register_uri_handler(handle, &image_ready_get));
+
+    const httpd_uri_t image_get = {
+        .uri = "/image", .method = HTTP_GET, .handler = image_get_handler, .user_ctx = NULL};
+    ESP_ERROR_RETURN(httpd_register_uri_handler(handle, &image_get));
+
+    const httpd_uri_t image_delete = {.uri = "/delete-image",
+                                      .method = HTTP_DELETE,
+                                      .handler = image_delete_handler,
+                                      .user_ctx = NULL};
+    ESP_ERROR_RETURN(httpd_register_uri_handler(handle, &image_delete));
 
     return ESP_OK;
 }
 
 esp_err_t webserver_init(void) {
+    // Initialize SPIFFS and load main page to memory.
+    ESP_ERROR_RETURN(start_spiffs());
+
     // Initialize mDNS and server.
     ESP_ERROR_RETURN(start_mdns());
     ESP_ERROR_RETURN(start_webserver());
