@@ -113,7 +113,8 @@
 
                 const imageReady = imageReadyReq.responseText == "1";
                 if (imageReady) {
-                    image.src = `http://${address}/image`;
+                    // 'Date.now()' is used to make sure most recent image is shown.
+                    image.src = `http://${address}/image?t=` + Date.now();
                     image.style.display = "";
                 }
                 else {
