@@ -23,4 +23,11 @@ menu "gb-printer configuration"
         help
             GPIO pin number to be used as GPIO_CLOCK.
 
+    config GPIO_WIFI_RESET
+        int "Wi-Fi reset button"
+        range ENV_GPIO_RANGE_MIN ENV_GPIO_IN_RANGE_MAX
+        default 27
+        help
+            GPIO pin number for Wi-Fi configuration reset button.
+
 endmenu

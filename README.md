@@ -35,3 +35,5 @@ My personal GB Pocket outputs 3.5V and I didn't encounter any issues without log
 
 Use EspTouch to configure Wi-Fi.
 After it is configured - access device using `http://gb-printer/`.
+
+Wi-Fi settings can be reset by holding a button during boot.

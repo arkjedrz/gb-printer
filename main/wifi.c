@@ -1,6 +1,7 @@
 #include "wifi.h"
 #include <string.h>
 #include "common.h"
+#include "driver/gpio.h"
 #include "esp_err.h"
 #include "esp_log.h"
 #include "esp_mac.h"
@@ -14,6 +15,9 @@ static const char* TAG = "WIFI";
 #define SSID_LEN 32
 #define PASS_KEY "WIFI_PASS"
 #define PASS_LEN 64
+
+#define WIFI_RESET_PIN  CONFIG_GPIO_WIFI_RESET
+#define WIFI_RESET_MASK (1 << WIFI_RESET_PIN)
 
 static EventGroupHandle_t event_group;
 static const int CONNECTED_BIT = BIT0;
@@ -32,6 +36,28 @@ static esp_err_t nvs_get_value(nvs_handle_t handle, const char* key, uint8_t* va
 
 static esp_err_t nvs_set_value(nvs_handle_t handle, const char* key, uint8_t* value) {
     return nvs_set_str(handle, key, (const char*)value);
+}
+
+static esp_err_t reset_wifi_config(void) {
+    // Configure button pin.
+    gpio_config_t io_conf;
+    io_conf.pin_bit_mask = WIFI_RESET_MASK;
+    io_conf.mode = GPIO_MODE_INPUT;
+    io_conf.pull_up_en = GPIO_PULLUP_ENABLE;
+    io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
+    io_conf.intr_type = GPIO_INTR_DISABLE;
+    ESP_ERROR_RETURN(gpio_config(&io_conf));
+
+    // Read button state. Reset config on 0.
+    bool reset_config = gpio_get_level(WIFI_RESET_PIN) == 0;
+    if (reset_config) {
+        nvs_handle_t nvs_handle;
+        ESP_ERROR_RETURN(nvs_open(nvs_namespace, NVS_READWRITE, &nvs_handle));
+        ESP_ERROR_RETURN(nvs_erase_all(nvs_handle));
+        nvs_close(nvs_handle);
+    }
+
+    return ESP_OK;
 }
 
 static void smartconfig_task(void* arg) {
@@ -104,6 +130,9 @@ static void event_handler(void* arg, esp_event_base_t event_base, int32_t event_
 esp_err_t wifi_init(void) {
     ESP_LOGI(TAG, "Starting Wi-Fi");
 
+    // Reset configuration if button is pressed during init.
+    ESP_ERROR_RETURN(reset_wifi_config());
+
     // Create event group.
     event_group = xEventGroupCreate();
 
@@ -133,6 +162,7 @@ esp_err_t wifi_init(void) {
         // It's okay to fail here.
         nvs_get_value(nvs_handle, SSID_KEY, wifi_cfg.sta.ssid, sizeof(wifi_cfg.sta.ssid));
         nvs_get_value(nvs_handle, PASS_KEY, wifi_cfg.sta.password, sizeof(wifi_cfg.sta.password));
+        nvs_close(nvs_handle);
     }
 
     ESP_ERROR_RETURN(esp_wifi_set_config(WIFI_IF_STA, &wifi_cfg));
