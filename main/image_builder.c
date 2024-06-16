@@ -6,6 +6,8 @@
 
 static const char* TAG = "IMAGE";
 
+#define PALETTE_SIZE 4
+
 // Fixed image width in pixels.
 static const uint32_t px_width = 160;
 // Fixed image width in tiles.
@@ -40,8 +42,8 @@ int image_num_parts(void) { return num_image_parts; }
 
 static uint32_t coord_1d(uint32_t x, uint32_t y, uint32_t width) { return y * width + x; }
 
-static void draw_tile(uint8_t* buffer, ImageData* image_part, uint32_t x_tile, uint32_t y_tile,
-                      uint32_t y_tile_offset) {
+static void draw_tile(uint8_t* buffer, ImageData* image_part, const uint8_t palette_lut[],
+                      uint32_t x_tile, uint32_t y_tile, uint32_t y_tile_offset) {
     const uint32_t y_px_start = y_tile * 8;
     const uint32_t x_px_start = x_tile * 8;
     const uint32_t y_tile_compensated = y_tile - y_tile_offset;
@@ -50,26 +52,62 @@ static void draw_tile(uint8_t* buffer, ImageData* image_part, uint32_t x_tile, u
 
     for (uint32_t y_px = y_px_start; y_px < y_px_start + 8; ++y_px) {
         uint32_t x_px = x_px_start;
-        uint8_t low = *buf_ptr;
-        uint8_t high = *(buf_ptr + 1);
+        const uint8_t low_byte = *buf_ptr;
+        const uint8_t high_byte = *(buf_ptr + 1);
         for (int b = 7; b >= 0; --b) {
-            uint8_t low_value = (low & (1 << b)) >> b;
-            uint8_t high_value = (high & (1 << b)) >> b;
+            const uint8_t low_value = (low_byte & (1 << b)) >> b;
+            const uint8_t high_value = (high_byte & (1 << b)) >> b;
+            const uint8_t color_id = high_value << 1 | low_value;
             const uint32_t coord = coord_1d(x_px, y_px, px_width);
-            if (low_value && high_value) {
-                buffer[coord] = 0x00;
-            } else if (high_value) {
-                buffer[coord] = 0x40;
-            } else if (low_value) {
-                buffer[coord] = 0xBF;
-            } else {
-                buffer[coord] = 0xFF;
-            }
+            buffer[coord] = palette_lut[color_id];
 
             ++x_px;
         }
         buf_ptr += 2;
     }
+}
+
+static esp_err_t create_palette_lut(const ImageData* image_data, uint8_t palette_lut[]) {
+    // Build 8-bit grayscale palette based on 2-bit GB palette.
+    const uint8_t gb_palette = image_data->palette;
+    // Exposure is 7-bit value - ignore MSB.
+    const uint8_t exposure = image_data->exposure & 0x7F;
+    for (int i = 0; i < PALETTE_SIZE; ++i) {
+        // Apply values based on GB palette.
+        uint8_t gb_palette_value = (gb_palette & (0b11 << i * 2)) >> i * 2;
+        uint8_t printer_palette_value = 0;
+        switch (gb_palette_value) {
+            case 0b11:
+                printer_palette_value = 0x00;
+                break;
+            case 0b10:
+                printer_palette_value = 0x40;
+                break;
+            case 0b01:
+                printer_palette_value = 0xBF;
+                break;
+            case 0b00:
+                printer_palette_value = 0xFF;
+                break;
+        }
+
+        // Modify value based on exposure.
+        // '0x00' - -25%
+        // '0x40' - 0%
+        // '0x7F' - +25%
+        const float exposure_offset = exposure - 0x40;
+        const int16_t lut_value = printer_palette_value + exposure_offset;
+        if (lut_value > UINT8_MAX) {
+            printer_palette_value = UINT8_MAX;
+        } else if (lut_value < 0) {
+            printer_palette_value = 0;
+        } else {
+            printer_palette_value = lut_value;
+        }
+        palette_lut[i] = printer_palette_value;
+    }
+
+    return ESP_OK;
 }
 
 static esp_err_t create_bitmap(uint8_t** buffer, uint32_t* image_height_px) {
@@ -108,9 +146,12 @@ static esp_err_t create_bitmap(uint8_t** buffer, uint32_t* image_height_px) {
     uint32_t curr_tile_height = 0;
     for (int i = 0; i < num_image_parts; ++i) {
         const uint32_t tile_height = num_tiles[i];
+        ImageData* image_data = &image_parts[i];
+        uint8_t palette_lut[PALETTE_SIZE];
+        ESP_ERROR_RETURN(create_palette_lut(image_data, palette_lut));
         for (size_t y = curr_tile_height; y < curr_tile_height + tile_height; ++y) {
             for (size_t x = 0; x < tile_width; ++x) {
-                draw_tile(*buffer, &image_parts[i], x, y, curr_tile_height);
+                draw_tile(*buffer, image_data, palette_lut, x, y, curr_tile_height);
             }
         }
         curr_tile_height += tile_height;
