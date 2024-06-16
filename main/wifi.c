@@ -83,7 +83,6 @@ static void event_handler(void* arg, esp_event_base_t event_base, int32_t event_
         esp_err_t connect_result = esp_wifi_connect();
         if (connect_result == ESP_ERR_WIFI_SSID) {
             // If unable to connect - run SmartConfig task.
-            // TODO: how to make it work alongside regular operation?
             xTaskCreate(smartconfig_task, "smartconfig_task", 4096, NULL, 1, NULL);
         } else {
             ESP_ERROR_CHECK(connect_result);

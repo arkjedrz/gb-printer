@@ -31,9 +31,6 @@ static void core1_task(UNUSED void* arg) {
 void app_main(void) {
     ESP_LOGI(TAG, "GB PRINTER EMULATOR");
 
-    // TODO: remove
-    esp_log_level_set("PRINTER", ESP_LOG_VERBOSE);
-
     // Create semaphores.
     core0_initialized_semaphore = xSemaphoreCreateBinary();
     core1_initialized_semaphore = xSemaphoreCreateBinary();
