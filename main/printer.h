@@ -27,8 +27,8 @@ enum StatusMask {
 /// @return Error code.
 esp_err_t printer_init(void);
 
-/// @return True if communication between GB and this device is ongoing.
-bool printer_is_link_active(void);
+/// @return True if GB is connected.
+bool printer_gb_connected(void);
 
 /// @return Current printer status. Use 'StatusMask' enum to decode.
 uint8_t printer_status(void);

@@ -61,7 +61,7 @@
         <h1>GB Printer emulator</h1>
     </div>
     <div class="content">
-        <p class="state">Link active: <span id="linkActive">false</span></p>
+        <p class="state">GB <span id="gbConnected">disconnected</span></p>
         <p class="state">Current status: <span id="printerStatus">00000000</span></p>
         <p><img id="image"></p>
         <p><button id="saveButton" class="button" title="Save image locally and remove on the device">Save</button></p>
@@ -83,24 +83,28 @@
                 .catch(console.error);
         }
 
-        // Link active indicator, status, and image display implementation.
+        // Connection indicator, status, and image display implementation.
         // Both share same 'setInterval' loop.
-        let linkActive = document.getElementById("linkActive");
+        let gbConnected = document.getElementById("gbConnected");
         let printerStatus = document.getElementById("printerStatus");
         let image = document.getElementById("image");
         setInterval(() => {
             // Get link active.
-            const linkActiveReq = new XMLHttpRequest();
-            linkActiveReq.open("GET", `http://${address}/link-active`);
-            linkActiveReq.send();
-            linkActiveReq.responseType = "text";
-            linkActiveReq.onload = () => {
-                if (linkActiveReq.readyState != 4 || linkActiveReq.status != 200) {
+            const gbConnectedReq = new XMLHttpRequest();
+            gbConnectedReq.open("GET", `http://${address}/gb-connected`);
+            gbConnectedReq.send();
+            gbConnectedReq.responseType = "text";
+            gbConnectedReq.onload = () => {
+                if (gbConnectedReq.readyState != 4 || gbConnectedReq.status != 200) {
                     return;
                 }
 
-                const value = linkActiveReq.responseText == "1";
-                linkActive.textContent = value;
+                if (gbConnectedReq.responseText == "1") {
+                    gbConnected.textContent = "connected";
+                }
+                else {
+                    gbConnected.textContent = "disconnected";
+                }
             };
 
             // Get printer status.

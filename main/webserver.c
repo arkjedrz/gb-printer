@@ -58,10 +58,10 @@ static esp_err_t main_page_get_handler(httpd_req_t* req) {
     return httpd_resp_send(req, index_html_data, HTTPD_RESP_USE_STRLEN);
 }
 
-static esp_err_t link_active_get_handler(httpd_req_t* req) {
-    ESP_LOGV(TAG, "link_active_get_handler");
+static esp_err_t gb_connected_get_handler(httpd_req_t* req) {
+    ESP_LOGV(TAG, "gb_connected_get_handler");
     char resp[16];
-    sprintf(resp, "%d", printer_is_link_active());
+    sprintf(resp, "%d", printer_gb_connected());
     return httpd_resp_send(req, resp, HTTPD_RESP_USE_STRLEN);
 }
 
@@ -112,11 +112,11 @@ static esp_err_t start_webserver(void) {
         .uri = "/", .method = HTTP_GET, .handler = main_page_get_handler, .user_ctx = NULL};
     ESP_ERROR_RETURN(httpd_register_uri_handler(handle, &main_page_get));
 
-    const httpd_uri_t link_active_get = {.uri = "/link-active",
-                                         .method = HTTP_GET,
-                                         .handler = link_active_get_handler,
-                                         .user_ctx = NULL};
-    ESP_ERROR_RETURN(httpd_register_uri_handler(handle, &link_active_get));
+    const httpd_uri_t gb_connected_get = {.uri = "/gb-connected",
+                                          .method = HTTP_GET,
+                                          .handler = gb_connected_get_handler,
+                                          .user_ctx = NULL};
+    ESP_ERROR_RETURN(httpd_register_uri_handler(handle, &gb_connected_get));
 
     const httpd_uri_t printer_status_get = {.uri = "/printer-status",
                                             .method = HTTP_GET,

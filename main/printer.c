@@ -14,6 +14,8 @@ static const char* TAG = "PRINTER";
 
 // Printer definitions.
 
+#define DETECT_PIN    CONFIG_GPIO_DETECT
+#define DETECT_MASK   (1 << DETECT_PIN)
 #define TX_PIN        CONFIG_GPIO_TX
 #define TX_MASK       (1 << TX_PIN)
 #define RX_PIN        CONFIG_GPIO_RX
@@ -39,8 +41,6 @@ typedef struct {
     uint16_t byte_counter;
     // Packet is being read.
     bool is_reading_packet;
-    // Data is being exchanged between GB and this device.
-    bool is_link_active;
     // Current printer status.
     uint8_t status;
 
@@ -235,7 +235,6 @@ static void IRAM_ATTR clock_isr_handler(UNUSED void* arg) {
     // Reset timeout timer.
     xTimerResetFromISR(conn_timeout_timer, NULL);
     xTimerResetFromISR(image_timeout_timer, NULL);
-    printer.is_link_active = true;
 
     // Read data.
     int rx_level = gpio_get_level(RX_PIN);
@@ -303,7 +302,6 @@ static void process_image_task(UNUSED void* arg) {
 
 void conn_timeout_cb(UNUSED TimerHandle_t timer_handle) {
     ESP_LOGV(TAG, "Connection timeout");
-    printer.is_link_active = false;
 
     // Reset state of the printer.
     memset(&packet, 0, sizeof(Packet));
@@ -338,7 +336,7 @@ esp_err_t printer_init(void) {
     io_conf.pin_bit_mask = TX_MASK;
     io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
     io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
-    ESP_ERROR_CHECK(gpio_config(&io_conf));
+    ESP_ERROR_RETURN(gpio_config(&io_conf));
 
     // Configure input pins.
     ESP_LOGD(TAG, "Initializing Rx pin %d", RX_PIN);
@@ -347,7 +345,7 @@ esp_err_t printer_init(void) {
     io_conf.pin_bit_mask = RX_MASK;
     io_conf.pull_down_en = GPIO_PULLDOWN_ENABLE;
     io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
-    ESP_ERROR_CHECK(gpio_config(&io_conf));
+    ESP_ERROR_RETURN(gpio_config(&io_conf));
 
     ESP_LOGD(TAG, "Initializing clock pin %d", CLOCK_PIN);
     io_conf.intr_type = GPIO_INTR_POSEDGE;
@@ -355,7 +353,15 @@ esp_err_t printer_init(void) {
     io_conf.pin_bit_mask = CLOCK_MASK;
     io_conf.pull_down_en = GPIO_PULLDOWN_ENABLE;
     io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
-    ESP_ERROR_CHECK(gpio_config(&io_conf));
+    ESP_ERROR_RETURN(gpio_config(&io_conf));
+
+    ESP_LOGD(TAG, "Initializing detect pin %d", DETECT_PIN);
+    io_conf.intr_type = GPIO_INTR_DISABLE;
+    io_conf.mode = GPIO_MODE_INPUT;
+    io_conf.pin_bit_mask = DETECT_MASK;
+    io_conf.pull_down_en = GPIO_PULLDOWN_ENABLE;
+    io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
+    ESP_ERROR_RETURN(gpio_config(&io_conf));
 
     // Create semaphores.
     image_ready_semaphore = xSemaphoreCreateBinary();
@@ -379,14 +385,14 @@ esp_err_t printer_init(void) {
 
     // Install GPIO ISR service.
     const int kEspIntrFlag = ESP_INTR_FLAG_LEVEL3 | ESP_INTR_FLAG_IRAM;
-    ESP_ERROR_CHECK(gpio_install_isr_service(kEspIntrFlag));
+    ESP_ERROR_RETURN(gpio_install_isr_service(kEspIntrFlag));
 
     // ISR handler for clock pin.
-    ESP_ERROR_CHECK(gpio_isr_handler_add(CLOCK_PIN, clock_isr_handler, NULL));
+    ESP_ERROR_RETURN(gpio_isr_handler_add(CLOCK_PIN, clock_isr_handler, NULL));
 
     return ESP_OK;
 }
 
-bool printer_is_link_active(void) { return printer.is_link_active; }
+bool printer_gb_connected(void) { return gpio_get_level(DETECT_PIN) > 0; }
 
 uint8_t printer_status(void) { return printer.status; }
