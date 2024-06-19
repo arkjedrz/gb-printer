@@ -39,12 +39,10 @@ typedef struct {
     uint16_t byte_counter;
     // Packet is being read.
     bool is_reading_packet;
-    // Image data is processed.
-    bool is_image_data_processed;
-    // Currently printing - or rather copying to image builder.
-    bool is_printing;
     // Data is being exchanged between GB and this device.
     bool is_link_active;
+    // Current printer status.
+    uint8_t status;
 
     // Input/output buffers.
     uint8_t rx_data_u8;
@@ -59,6 +57,10 @@ static Packet packet = {};
 static Printer printer = {};
 static ImageData image_data = {};
 
+static void set_status(enum StatusMask mask) { printer.status |= mask; }
+
+static void reset_status(enum StatusMask mask) { printer.status &= !mask; }
+
 /// @brief Handle byte, once received.
 ///        Command specific operations are performed during handling of 'data' section.
 static void process_byte() {
@@ -69,12 +71,34 @@ static void process_byte() {
     if (printer.byte_counter == 0) {
         packet.command = printer.rx_data_u8;
         packet.computed_checksum = printer.rx_data_u8;
+
+        // Check if command is valid.
+        switch (packet.command) {
+            case 0x01:
+            case 0x02:
+            case 0x04:
+            case 0x0F:
+                break;
+            default: {
+                set_status(STATUS_PACKET_ERROR);
+            }
+        }
     }
 
     // Compression.
     if (printer.byte_counter == 1) {
         packet.compression = printer.rx_data_u8;
         packet.computed_checksum += printer.rx_data_u8;
+
+        // Check if compression is expected - currently not supported.
+        if (packet.compression > 0) {
+            set_status(STATUS_OTHER_ERROR);
+        }
+
+        // Check if there's a processed image in the memory.
+        if (image_png_buffer() != NULL) {
+            set_status(STATUS_PAPER_JAM);
+        }
     }
 
     // Data length low.
@@ -87,10 +111,23 @@ static void process_byte() {
     if (printer.byte_counter == 3) {
         packet.length |= (printer.rx_data_u8 & 0xFF) << 8;
         packet.computed_checksum += printer.rx_data_u8;
+
+        // Check if length is valid.
+        bool length_valid = false;
+        if (packet.command == 0x02) {
+            length_valid = packet.length == 4;
+        } else if (packet.command == 0x04) {
+            length_valid = packet.length <= MAX_DATA_SIZE;
+        } else {
+            length_valid = packet.length == 0;
+        }
+        if (!length_valid) {
+            set_status(STATUS_PACKET_ERROR);
+        }
     }
 
     // Data and commands.
-    if (packet.command == 0x01 ||
+    if (packet.command == 0x01 || packet.command == 0x0F ||
         (printer.byte_counter >= 4 && printer.byte_counter < 4 + packet.length)) {
         // Received data index.
         uint16_t data_index = printer.byte_counter - 4;
@@ -106,7 +143,8 @@ static void process_byte() {
                 image_data.palette = 0;
                 image_data.exposure = 0;
                 image_data.length = 0;
-                printer.is_image_data_processed = false;
+                reset_status(STATUS_DATA_FULL);
+                reset_status(STATUS_DATA_UNPROCESSED);
                 break;
             }
             // Start printing.
@@ -139,6 +177,21 @@ static void process_byte() {
                 image_data.data[image_data.length] = printer.rx_data_u8;
                 packet.computed_checksum += printer.rx_data_u8;
                 ++image_data.length;
+
+                // Check if image data is full.
+                if (image_data.length == IMAGE_BUFFER_SIZE) {
+                    set_status(STATUS_DATA_FULL);
+                }
+
+                break;
+            }
+            // Check status.
+            case 0x0F: {
+                // Unprocessed data flag is set here.
+                // This is to avoid flag being raised once any data arrived.
+                if (image_data.length > 0) {
+                    set_status(STATUS_DATA_UNPROCESSED);
+                }
                 break;
             }
         }
@@ -153,34 +206,18 @@ static void process_byte() {
     if (printer.byte_counter == 5 + packet.length) {
         packet.received_checksum |= (printer.rx_data_u8 & 0xFF) << 8;
 
+        // Check if checksum is valid.
+        if (packet.received_checksum != packet.computed_checksum) {
+            set_status(STATUS_CHECKSUM_ERROR);
+        }
+
         // Once checksum is received - always send '0x81'.
         printer.tx_data_u8 = 0x81;
     }
 
     // Printer status.
     if (printer.byte_counter == 6 + packet.length) {
-        uint8_t status = 0;
-        // 7 - low battery - never set.
-        // 6 - other error - never set.
-        // 5 - paper jam - never set.
-        // 4 - packet error - never set.
-        // 3 - unprocessed data.
-        if (image_data.length > 0 && !printer.is_image_data_processed) {
-            status |= 1 << 3;
-        }
-        // 2 - image data full.
-        if (image_data.length == IMAGE_BUFFER_SIZE - 1) {
-            status |= 1 << 2;
-        }
-        // 1 - currently printing.
-        if (printer.is_printing) {
-            status |= 1 << 1;
-        }
-        // 0 - checksum error.
-        if (packet.received_checksum != packet.computed_checksum) {
-            status |= 1 << 0;
-        }
-        printer.tx_data_u8 = status;
+        printer.tx_data_u8 = printer.status;
     }
 
     // Allow status to be sent.
@@ -241,7 +278,7 @@ static void process_image_task(UNUSED void* arg) {
         }
 
         // Printing is active.
-        printer.is_printing = true;
+        set_status(STATUS_CURRENTLY_PRINTING);
 
         // Print image information.
         ESP_LOGV(TAG, "Image received");
@@ -257,8 +294,10 @@ static void process_image_task(UNUSED void* arg) {
         ESP_ERROR_CHECK(image_add_data(&image_data));
 
         // Printing is not active.
-        printer.is_printing = false;
-        printer.is_image_data_processed = true;
+        reset_status(STATUS_CURRENTLY_PRINTING);
+
+        // Received data is now processed.
+        reset_status(STATUS_DATA_UNPROCESSED);
     }
 }
 
@@ -280,7 +319,6 @@ void image_timeout_cb(UNUSED TimerHandle_t timer_handle) {
     }
 
     // Process available data to create an image.
-    // TODO: change approach to directly append data to bitmap buffer, then convert to PNG on HTTP request.
     ESP_LOGI(TAG, "Image data is available - processing");
     ESP_ERROR_CHECK(image_process());
 
@@ -324,10 +362,12 @@ esp_err_t printer_init(void) {
 
     // Create and start timers.
     const int kConnTimeoutTicks = pdMS_TO_TICKS(100);
-    conn_timeout_timer = xTimerCreate("conn_timeout_timer", kConnTimeoutTicks, true, NULL, conn_timeout_cb);
+    conn_timeout_timer =
+        xTimerCreate("conn_timeout_timer", kConnTimeoutTicks, true, NULL, conn_timeout_cb);
     xTimerStart(conn_timeout_timer, kConnTimeoutTicks);
     const int kImageTimeoutTicks = pdMS_TO_TICKS(500);
-    image_timeout_timer = xTimerCreate("image_timeout_timer", kImageTimeoutTicks, true, NULL, image_timeout_cb);
+    image_timeout_timer =
+        xTimerCreate("image_timeout_timer", kImageTimeoutTicks, true, NULL, image_timeout_cb);
     xTimerStart(image_timeout_timer, kImageTimeoutTicks);
 
     // Start task for processing packets and images.
@@ -348,3 +388,5 @@ esp_err_t printer_init(void) {
 }
 
 bool printer_is_link_active(void) { return printer.is_link_active; }
+
+uint8_t printer_status(void) { return printer.status; }

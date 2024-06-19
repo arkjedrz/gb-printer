@@ -61,7 +61,8 @@
         <h1>GB Printer emulator</h1>
     </div>
     <div class="content">
-        <p class="state">Link active: <span id="linkActiveState">false</span></p>
+        <p class="state">Link active: <span id="linkActive">false</span></p>
+        <p class="state">Current status: <span id="printerStatus">00000000</span></p>
         <p><img id="image"></p>
         <p><button id="saveButton" class="button" title="Save image locally and remove on the device">Save</button></p>
         <p><button id="removeButton" class="button" title="Remove image on the device">Remove</button></p>
@@ -82,9 +83,10 @@
                 .catch(console.error);
         }
 
-        // Link active indicator and image display implementation.
+        // Link active indicator, status, and image display implementation.
         // Both share same 'setInterval' loop.
-        let linkActiveState = document.getElementById("linkActiveState");
+        let linkActive = document.getElementById("linkActive");
+        let printerStatus = document.getElementById("printerStatus");
         let image = document.getElementById("image");
         setInterval(() => {
             // Get link active.
@@ -97,8 +99,22 @@
                     return;
                 }
 
-                const linkActive = linkActiveReq.responseText == "1";
-                linkActiveState.textContent = linkActive;
+                const value = linkActiveReq.responseText == "1";
+                linkActive.textContent = value;
+            };
+
+            // Get printer status.
+            const printerStatusReq = new XMLHttpRequest();
+            printerStatusReq.open("GET", `http://${address}/printer-status`);
+            printerStatusReq.send();
+            printerStatusReq.responseType = "text";
+            printerStatusReq.onload = () => {
+                if (printerStatusReq.readyState != 4 || printerStatusReq.status != 200) {
+                    return;
+                }
+
+                const value = printerStatusReq.responseText;
+                printerStatus.textContent = parseInt(value).toString(2).padStart(8, "0");
             };
 
             // Get image ready and image.

@@ -65,10 +65,17 @@ static esp_err_t link_active_get_handler(httpd_req_t* req) {
     return httpd_resp_send(req, resp, HTTPD_RESP_USE_STRLEN);
 }
 
+static esp_err_t printer_status_get_handler(httpd_req_t* req) {
+    ESP_LOGV(TAG, "printer_status_get_handler");
+    char resp[16];
+    sprintf(resp, "%d", printer_status());
+    return httpd_resp_send(req, resp, HTTPD_RESP_USE_STRLEN);
+}
+
 static esp_err_t image_ready_get_handler(httpd_req_t* req) {
     ESP_LOGV(TAG, "image_ready_get_handler");
     char resp[16];
-    sprintf(resp, "%d", image_png_ready());
+    sprintf(resp, "%d", image_png_buffer() != NULL);
     return httpd_resp_send(req, resp, HTTPD_RESP_USE_STRLEN);
 }
 
@@ -110,6 +117,12 @@ static esp_err_t start_webserver(void) {
                                          .handler = link_active_get_handler,
                                          .user_ctx = NULL};
     ESP_ERROR_RETURN(httpd_register_uri_handler(handle, &link_active_get));
+
+    const httpd_uri_t printer_status_get = {.uri = "/printer-status",
+                                            .method = HTTP_GET,
+                                            .handler = printer_status_get_handler,
+                                            .user_ctx = NULL};
+    ESP_ERROR_RETURN(httpd_register_uri_handler(handle, &printer_status_get));
 
     const httpd_uri_t image_ready_get = {.uri = "/image-ready",
                                          .method = HTTP_GET,

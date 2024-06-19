@@ -16,7 +16,6 @@ static const uint32_t tile_width = px_width / 8;
 static int num_image_parts = 0;
 static ImageData* image_parts = NULL;
 
-static bool png_ready = false;
 static uint8_t* png_buffer = NULL;
 static size_t png_length = 0;
 
@@ -187,32 +186,16 @@ esp_err_t image_process(void) {
         return ESP_FAIL;
     }
 
-    png_ready = true;
     ESP_LOGI(TAG, "Image ready");
     return ESP_OK;
 }
 
-bool image_png_ready(void) { return png_ready; }
+size_t image_png_length(void) { return png_length; }
 
-size_t image_png_length(void) {
-    // Return 0 if not ready.
-    if (!png_ready) {
-        return 0;
-    }
-    return png_length;
-}
-
-const uint8_t* image_png_buffer(void) {
-    // Return NULL if not ready.
-    if (!png_ready) {
-        return NULL;
-    }
-    return png_buffer;
-}
+const uint8_t* image_png_buffer(void) { return png_buffer; }
 
 void image_png_clear(void) {
     free(png_buffer);
     png_buffer = NULL;
     png_length = 0;
-    png_ready = false;
 }

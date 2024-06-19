@@ -35,11 +35,7 @@ int image_num_parts(void);
 /// @return Error code.
 esp_err_t image_process(void);
 
-/// @return True if image is ready.
-bool image_png_ready(void);
-
 /// @brief  Get length of image buffer.
-///         Image must be ready.
 /// @return Length of PNG image buffer.
 ///         0 if not ready.
 size_t image_png_length(void);
