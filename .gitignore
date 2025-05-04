@@ -1,3 +1,6 @@
+# VS Code local configuration
+.vscode/
+
 # ESP-IDF specific
 build/
 managed_components/
