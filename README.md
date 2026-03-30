@@ -7,8 +7,8 @@ GB Printer emulator based on ESP32.
 Configuration used for development:
 
 - `FireBeetle 2 ESP32-E IoT`
-- `ESP-IDF v5.4`
-- `Linux Mint 21.3`, `Fedora Linux 42`.
+- `ESP-IDF v5.4.3`
+- `Linux Mint 21.3`, `Fedora Linux 42`, `Debian 13`.
 
 ```bash
 idf.py build
