@@ -42,8 +42,6 @@ static esp_err_t start_spiffs(void) {
 static esp_err_t start_mdns(void) {
     // Initialize and set names.
     ESP_ERROR_RETURN(mdns_init());
-
-    // TODO: what will happen if multiple devices with same hostname exist?
     ESP_ERROR_RETURN(mdns_hostname_set("gb-printer"));
     ESP_ERROR_RETURN(mdns_instance_name_set("GB Printer emulator"));
 

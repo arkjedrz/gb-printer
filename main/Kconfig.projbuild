@@ -30,11 +30,29 @@ menu "gb-printer configuration"
         help
             GPIO pin number to be used as GPIO_CLOCK.
 
-    config GPIO_WIFI_RESET
-        int "Wi-Fi reset button"
-        range ENV_GPIO_RANGE_MIN ENV_GPIO_IN_RANGE_MAX
-        default 27
+    config AP_SSID
+        string "Access point SSID"
+        default "gb-printer"
         help
-            GPIO pin number for Wi-Fi configuration reset button.
+            Access point SSID.
+
+    config AP_PASS
+        string "Access point password"
+        default "gb-printer"
+        help
+            Access point password (WPA2).
+
+    config WIFI_CHANNEL
+        int "Wi-Fi Channel"
+        range 1 13
+        default 1
+        help
+            Wi-Fi channel to use.
+
+    config MAX_STA_CONN
+        int "Max number of connections"
+        default 1
+        help
+            Max number of allowed connections.
 
 endmenu

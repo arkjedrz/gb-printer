@@ -12,6 +12,8 @@ Configuration used for development:
 
 ```bash
 idf.py build
+idf.py flash
+idf.py monitor
 ```
 
 ### Pinout
@@ -33,7 +35,6 @@ My personal GB Pocket outputs 3.5V and I didn't encounter any issues without log
 
 ## Usage
 
-Use EspTouch to configure Wi-Fi.
-After it is configured - access device using `http://gb-printer/`.
+Device is configured as an access point with SSID: `gb-printer`, password: `gb-printer`.
 
-Wi-Fi settings can be reset by holding a button during boot.
+Once connected - access device using `http://gb-printer.local/`.
